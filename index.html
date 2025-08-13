@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Members of Parliament - Dodge the Questions!</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(135deg, #1a1a2e, #16213e);
+            color: white;
+            font-family: 'Arial', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+        
+        #gameTitle {
+            text-align: center;
+            margin: 20px 0;
+        }
+        
+        #gameTitle h1 {
+            font-size: 2.5em;
+            margin: 0;
+            background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        #gameTitle p {
+            margin: 5px 0;
+            opacity: 0.8;
+        }
+        
+        canvas {
+            border: 3px solid #4ecdc4;
+            background: #0a0a1a;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(78, 205, 196, 0.3);
+        }
+        
+        #gameInfo {
+            display: flex;
+            gap: 30px;
+            margin: 15px 0;
+            font-size: 1.2em;
+        }
+        
+        #controls {
+            text-align: center;
+            margin: 15px 0;
+            opacity: 0.7;
+        }
+        
+        #gameOver {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            padding: 30px;
+            border-radius: 15px;
+            text-align: center;
+            display: none;
+            border: 2px solid #ff6b6b;
+        }
+        
+        button {
+            background: linear-gradient(45deg, #4ecdc4, #44a08d);
+            border: none;
+            color: white;
+            padding: 12px 25px;
+            font-size: 16px;
+            border-radius: 25px;
+            cursor: pointer;
+            margin-top: 15px;
+            transition: transform 0.2s;
+        }
+        
+        button:hover {
+            transform: scale(1.05);
+        }
+    </style>
+</head>
+<body>
+    <div id="gameTitle">
+        <h1>Members of Parliament</h1>
+        <p>Dodge the Questions!</p>
+    </div>
+    
+    <div id="gameInfo">
+        <div>Score: <span id="score">0</span></div>
+        <div>Lives: <span id="lives">3</span></div>
+        <div>Level: <span id="level">1</span></div>
+    </div>
+    
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    
+    <div id="controls">
+        <p>Arrow Keys: Move • Space: Shoot down questions • R: Restart</p>
+    </div>
+    
+    <div id="gameOver">
+        <h2>Political Career Over!</h2>
+        <p>The questions got the better of you...</p>
+        <p>Final Score: <span id="finalScore">0</span></p>
+        <button onclick="restartGame()">Run for Re-election</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Game state
+        let game = {
+            score: 0,
+            lives: 3,
+            level: 1,
+            gameRunning: true,
+            keys: {}
+        };
+        
+        // Player (MP)
+        let player = {
+            x: canvas.width / 2,
+            y: canvas.height / 2,
+            angle: 0,
+            size: 15,
+            thrust: false,
+            vx: 0,
+            vy: 0,
+            friction: 0.98
+        };
+        
+        // Game objects
+        let questions = [];
+        let bullets = [];
+        let particles = [];
+        
+        // Question texts for variety - modern political issues
+        const questionTexts = [
+            "Tax Policy?",
+            "Healthcare?",
+            "Education?",
+            "Economy?",
+            "Immigration?",
+            "Environment?",
+            "Defence?",
+            "Where did inflation come from?",
+            "When is the boriswave going back?",
+            "When will Bitcoin be adopted?",
+            "Freedom of speech?",
+            "Welfare spending?",
+            "Productivity crisis?",
+            "Housing?",
+            "Transport?",
+            "Energy bills?",
+            "NHS waiting lists?",
+            "Small boats?",
+            "Net zero costs?",
+            "Strike action?"
+        ];
+        
+        // Input handling
+        document.addEventListener('keydown', (e) => {
+            game.keys[e.key] = true;
+            if (e.key === ' ') {
+                e.preventDefault();
+                shoot();
+            }
+            if (e.key.toLowerCase() === 'r') {
+                restartGame();
+            }
+        });
+        
+        document.addEventListener('keyup', (e) => {
+            game.keys[e.key] = false;
+        });
+        
+        function shoot() {
+            if (!game.gameRunning) return;
+            
+            bullets.push({
+                x: player.x,
+                y: player.y,
+                vx: Math.cos(player.angle) * 8,
+                vy: Math.sin(player.angle) * 8,
+                life: 60
+            });
+        }
+        
+        function createQuestion(x, y, size) {
+            questions.push({
+                x: x || Math.random() * canvas.width,
+                y: y || Math.random() * canvas.height,
+                vx: (Math.random() - 0.5) * 2,
+                vy: (Math.random() - 0.5) * 2,
+                angle: Math.random() * Math.PI * 2,
+                rotation: (Math.random() - 0.5) * 0.1,
+                size: size || 40 + Math.random() * 30,
+                text: questionTexts[Math.floor(Math.random() * questionTexts.length)]
+            });
+        }
+        
+        function createParticles(x, y, color) {
+            for (let i = 0; i < 8; i++) {
+                particles.push({
+                    x: x,
+                    y: y,
+                    vx: (Math.random() - 0.5) * 6,
+                    vy: (Math.random() - 0.5) * 6,
+                    life: 30,
+                    color: color
+                });
+            }
+        }
+        
+        function updatePlayer() {
+            // Rotation
+            if (game.keys['ArrowLeft']) {
+                player.angle -= 0.15;
+            }
+            if (game.keys['ArrowRight']) {
+                player.angle += 0.15;
+            }
+            
+            // Thrust
+            player.thrust = game.keys['ArrowUp'];
+            if (player.thrust) {
+                player.vx += Math.cos(player.angle) * 0.3;
+                player.vy += Math.sin(player.angle) * 0.3;
+            }
+            
+            // Apply friction and movement
+            player.vx *= player.friction;
+            player.vy *= player.friction;
+            player.x += player.vx;
+            player.y += player.vy;
+            
+            // Wrap around screen
+            if (player.x < 0) player.x = canvas.width;
+            if (player.x > canvas.width) player.x = 0;
+            if (player.y < 0) player.y = canvas.height;
+            if (player.y > canvas.height) player.y = 0;
+        }
+        
+        function updateQuestions() {
+            for (let i = questions.length - 1; i >= 0; i--) {
+                let q = questions[i];
+                
+                q.x += q.vx;
+                q.y += q.vy;
+                q.angle += q.rotation;
+                
+                // Wrap around screen
+                if (q.x < -q.size) q.x = canvas.width + q.size;
+                if (q.x > canvas.width + q.size) q.x = -q.size;
+                if (q.y < -q.size) q.y = canvas.height + q.size;
+                if (q.y > canvas.height + q.size) q.y = -q.size;
+                
+                // Check collision with player
+                let dx = q.x - player.x;
+                let dy = q.y - player.y;
+                let distance = Math.sqrt(dx * dx + dy * dy);
+                
+                if (distance < q.size + player.size) {
+                    // Player hit by question - remove the question and damage player
+                    createParticles(player.x, player.y, '#ff6b6b');
+                    questions.splice(i, 1); // Remove the question that hit the player
+                    game.lives--;
+                    
+                    if (game.lives <= 0) {
+                        gameOver();
+                        return; // Stop processing after game over
+                    } else {
+                        // Reset player position and give brief invincibility
+                        player.x = canvas.width / 2;
+                        player.y = canvas.height / 2;
+                        player.vx = 0;
+                        player.vy = 0;
+                        
+                        // Brief pause to show what happened
+                        setTimeout(() => {
+                            updateUI();
+                        }, 100);
+                    }
+                    updateUI(); // Update the display immediately
+                    break; // Stop checking other questions this frame
+                }
+            }
+        }
+        
+        function updateBullets() {
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                let b = bullets[i];
+                
+                b.x += b.vx;
+                b.y += b.vy;
+                b.life--;
+                
+                // Remove if off screen or life expired
+                if (b.x < 0 || b.x > canvas.width || b.y < 0 || b.y > canvas.height || b.life <= 0) {
+                    bullets.splice(i, 1);
+                    continue;
+                }
+                
+                // Check collision with questions
+                for (let j = questions.length - 1; j >= 0; j--) {
+                    let q = questions[j];
+                    let dx = b.x - q.x;
+                    let dy = b.y - q.y;
+                    let distance = Math.sqrt(dx * dx + dy * dy);
+                    
+                    if (distance < q.size) {
+                        // Question destroyed
+                        createParticles(q.x, q.y, '#4ecdc4');
+                        game.score += Math.floor(q.size);
+                        updateUI(); // Update score immediately
+                        
+                        // Split larger questions
+                        if (q.size > 30) {
+                            createQuestion(q.x, q.y, q.size * 0.6);
+                            createQuestion(q.x, q.y, q.size * 0.6);
+                        }
+                        
+                        questions.splice(j, 1);
+                        bullets.splice(i, 1);
+                        break;
+                    }
+                }
+            }
+        }
+        
+        function updateParticles() {
+            for (let i = particles.length - 1; i >= 0; i--) {
+                let p = particles[i];
+                
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life--;
+                
+                if (p.life <= 0) {
+                    particles.splice(i, 1);
+                }
+            }
+        }
+        
+        function drawPlayer() {
+            ctx.save();
+            ctx.translate(player.x, player.y);
+            ctx.rotate(player.angle);
+            
+            // Draw MP (triangle with suit)
+            ctx.fillStyle = '#4ecdc4';
+            ctx.beginPath();
+            ctx.moveTo(15, 0);
+            ctx.lineTo(-10, -8);
+            ctx.lineTo(-10, 8);
+            ctx.closePath();
+            ctx.fill();
+            
+            // Draw thrust effect
+            if (player.thrust) {
+                ctx.fillStyle = '#ff6b6b';
+                ctx.beginPath();
+                ctx.moveTo(-10, -3);
+                ctx.lineTo(-18, 0);
+                ctx.lineTo(-10, 3);
+                ctx.closePath();
+                ctx.fill();
+            }
+            
+            ctx.restore();
+        }
+        
+        function drawQuestions() {
+            questions.forEach(q => {
+                ctx.save();
+                ctx.translate(q.x, q.y);
+                ctx.rotate(q.angle);
+                
+                // Draw question bubble
+                ctx.fillStyle = '#ff6b6b';
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(0, 0, q.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+                
+                // Draw question text
+                ctx.fillStyle = 'white';
+                ctx.font = `${Math.max(10, q.size * 0.3)}px Arial`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(q.text, 0, 0);
+                
+                ctx.restore();
+            });
+        }
+        
+        function drawBullets() {
+            ctx.fillStyle = '#4ecdc4';
+            bullets.forEach(b => {
+                ctx.beginPath();
+                ctx.arc(b.x, b.y, 3, 0, Math.PI * 2);
+                ctx.fill();
+            });
+        }
+        
+        function drawParticles() {
+            particles.forEach(p => {
+                ctx.fillStyle = p.color;
+                ctx.globalAlpha = p.life / 30;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 2, 0, Math.PI * 2);
+                ctx.fill();
+            });
+            ctx.globalAlpha = 1;
+        }
+        
+        function checkLevelComplete() {
+            if (questions.length === 0) {
+                game.level++;
+                // Spawn new questions for next level
+                for (let i = 0; i < game.level + 2; i++) {
+                    createQuestion();
+                }
+                updateUI();
+            }
+        }
+        
+        function updateUI() {
+            document.getElementById('score').textContent = game.score;
+            document.getElementById('lives').textContent = game.lives;
+            document.getElementById('level').textContent = game.level;
+        }
+        
+        function gameOver() {
+            game.gameRunning = false;
+            document.getElementById('finalScore').textContent = game.score;
+            document.getElementById('gameOver').style.display = 'block';
+        }
+        
+        function restartGame() {
+            game = {
+                score: 0,
+                lives: 3,
+                level: 1,
+                gameRunning: true,
+                keys: {}
+            };
+            
+            player = {
+                x: canvas.width / 2,
+                y: canvas.height / 2,
+                angle: 0,
+                size: 15,
+                thrust: false,
+                vx: 0,
+                vy: 0,
+                friction: 0.98
+            };
+            
+            questions = [];
+            bullets = [];
+            particles = [];
+            
+            // Create initial questions
+            for (let i = 0; i < 5; i++) {
+                createQuestion();
+            }
+            
+            document.getElementById('gameOver').style.display = 'none';
+            updateUI();
+        }
+        
+        function gameLoop() {
+            // Clear canvas
+            ctx.fillStyle = '#0a0a1a';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            if (game.gameRunning) {
+                updatePlayer();
+                updateQuestions();
+                updateBullets();
+                updateParticles();
+                checkLevelComplete();
+            }
+            
+            drawPlayer();
+            drawQuestions();
+            drawBullets();
+            drawParticles();
+            
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // Initialize game
+        restartGame();
+        gameLoop();
+    </script>
+</body>
+</html>
